@@ -4,19 +4,20 @@ Compile your first custom recovery from OrangeFox Recovery using Github Action w
 # How to Use
 1. Fork this repository.
 
-2. Prepare your stock images:
-   * Create a `.tar.xz` archive containing your device's stock boot images (boot.img, init_boot.img, or recovery.img)
-   * Upload it to a publicly accessible URL (e.g., GitHub Releases)
-   * Example: `https://github.com/cyanmint/OrangeFox-Action-Builder/releases/download/stock/ruyi.tar.xz`
+2. Prepare your OTA file:
+   * Get the OTA zip file URL from your device manufacturer's update server
+   * Example: `https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/OS2.0.209.0.VNIMIXM/ruyi_global-ota_full-OS2.0.209.0.VNIMIXM-user-15.0-7b32cbf246.zip`
+   * **Note**: Only OTA zip files are supported. Raw boot images (boot.img) are NOT supported by dumpyara.
 
 3. Go to `Action` tab > `All workflows` > `OrangeFox - Build` > `Run workflow`, then fill the required information:
  * **MANIFEST_BRANCH** (`12.1` and `11.0`) - OrangeFox manifest version
- * **STOCK_IMAGES_URL** - Direct URL to your `.tar.xz` file containing stock boot images
+ * **STOCK_IMAGES_URL** - Direct URL to your OTA zip file
  * **BUILD_TARGET** (`boot`, `recovery`, `vendorboot`) - Which image to build
  * **SKIP_CLEANUP** (optional) - Skip cleanup step to save time when testing (may cause disk space issues for large builds)
 
 The workflow will automatically:
-- Download and extract your stock images
+- Download your OTA file
+- Extract and process images using dumpyara
 - Generate a device tree using aospdtgen
 - Build OrangeFox recovery for your device
 
@@ -24,4 +25,5 @@ The workflow will automatically:
 * This action will now only support manifest 12.1 and 11.0, since all orangefox manifest below 11.0 are considered obsolete.
 * Device tree is automatically generated from stock images using [aospdtgen](https://github.com/sebaubuntu-python/aospdtgen)
 * This works with Treble-enabled devices (Android 8.0+). For older devices, you may need to provide a manual device tree.
-* Make sure your stock images archive contains at least one of: boot.img, init_boot.img, or recovery.img
+* **Only OTA zip files are supported** - dumpyara processes OTA packages and extracts all necessary images automatically
+* Raw boot.img files cannot be used directly - they must be part of an OTA package

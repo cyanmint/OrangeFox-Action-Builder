@@ -18,9 +18,9 @@ on:
         - 12.1
         - 11.0
       STOCK_IMAGES_URL:
-        description: 'URL to stock images tar.xz (contains boot.img, init_boot.img, recovery.img)'
+        description: 'URL to OTA zip file (e.g., from manufacturer update server)'
         required: true
-        default: 'https://github.com/cyanmint/OrangeFox-Action-Builder/releases/download/stock/ruyi.tar.xz'
+        default: 'https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/OS2.0.209.0.VNIMIXM/ruyi_global-ota_full-OS2.0.209.0.VNIMIXM-user-15.0-7b32cbf246.zip'
       BUILD_TARGET:
         description: 'Specify your Build Target'
         required: true
@@ -72,29 +72,28 @@ jobs:
         pip3 install dumpyara aospdtgen
         echo "$HOME/.local/bin" >> $GITHUB_PATH
     
-    - name: Download and Extract Stock Images
+    - name: Download and Process OTA File
       run: |
         mkdir -p ${GITHUB_WORKSPACE}/stock_images
         cd ${GITHUB_WORKSPACE}/stock_images
-        wget -O stock.tar.xz "${{ inputs.STOCK_IMAGES_URL }}"
-        tar -xf stock.tar.xz
-        ls -la
         
-        # Use dumpyara to extract the images into proper dump format
-        # dumpyara can process boot.img, recovery.img, etc.
-        if [ -f boot.img ]; then
-          echo "Processing boot.img with dumpyara..."
-          python3 -m dumpyara boot.img
-        elif [ -f init_boot.img ]; then
-          echo "Processing init_boot.img with dumpyara..."
-          python3 -m dumpyara init_boot.img
-        elif [ -f recovery.img ]; then
-          echo "Processing recovery.img with dumpyara..."
-          python3 -m dumpyara recovery.img
-        else
-          echo "No suitable boot image found"
+        # Download the OTA file
+        INPUT_URL="${{ inputs.STOCK_IMAGES_URL }}"
+        echo "Downloading OTA file from: $INPUT_URL"
+        wget -O ota_file.zip "$INPUT_URL"
+        
+        # Verify it's a zip file
+        FILE_TYPE=$(file -b ota_file.zip | cut -d' ' -f1)
+        if [[ "$FILE_TYPE" != "Zip" ]]; then
+          echo "Error: The provided file is not a valid OTA zip file"
+          echo "File type detected: $FILE_TYPE"
+          echo "Please provide a valid OTA zip file URL"
           exit 1
         fi
+        
+        # Process OTA file with dumpyara
+        echo "Processing OTA file with dumpyara..."
+        python3 -m dumpyara ota_file.zip
         
         # Find the dump directory created by dumpyara
         DUMP_DIR=$(find . -maxdepth 1 -type d -name "*dump*" | head -n 1)
