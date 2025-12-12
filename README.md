@@ -24,3 +24,4 @@ The workflow will automatically:
 * Device tree is automatically generated from stock images using [aospdtgen](https://github.com/sebaubuntu-python/aospdtgen)
 * This works with Treble-enabled devices (Android 8.0+). For older devices, you may need to provide a manual device tree.
 * Make sure your stock images archive contains at least one of: boot.img, init_boot.img, or recovery.img
+
