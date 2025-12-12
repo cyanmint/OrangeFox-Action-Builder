@@ -17,22 +17,10 @@ on:
         options:
         - 12.1
         - 11.0
-      DEVICE_TREE:
-        description: 'OrangeFox Device Tree'
+      STOCK_IMAGES_URL:
+        description: 'URL to stock images tar.xz (contains boot.img, init_boot.img, recovery.img)'
         required: true
-        default: 'https://github.com/cd-Crypton/custom_recovery_tree_realme_nashc'
-      DEVICE_TREE_BRANCH:
-        description: 'OrangeFox Device Tree Branch'
-        required: true
-        default: 'android-12.1'
-      DEVICE_PATH:
-        description: 'Specify your Device Path'
-        required: true
-        default: 'device/realme/nashc'
-      DEVICE_NAME:
-        description: 'Specify your Device Codename'
-        required: true
-        default: 'nashc'
+        default: 'https://github.com/cyanmint/OrangeFox-Action-Builder/releases/download/stock/ruyi.tar.xz'
       BUILD_TARGET:
         description: 'Specify your Build Target'
         required: true
@@ -69,6 +57,48 @@ jobs:
         git clone https://gitlab.com/OrangeFox/misc/scripts.git -b master
         cd scripts
         sudo bash setup/android_build_env.sh
+    
+    - name: Install Device Tree Generator
+      run: |
+        sudo apt update
+        sudo apt install -y python3 python3-pip unace unrar zip unzip p7zip-full p7zip-rar sharutils rar uudeview mpack arj cabextract file-roller device-tree-compiler liblzma-dev python3-pip brotli liblz4-tool axel gawk aria2 detox cpio rename liblz4-tool
+        pip3 install backports.lzma protobuf pycrypto docopt zstandard brotli extract-dtb pycryptodome
+        pip3 install dumpyara aospdtgen
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+    
+    - name: Download and Extract Stock Images
+      run: |
+        mkdir -p ${GITHUB_WORKSPACE}/stock_images
+        cd ${GITHUB_WORKSPACE}/stock_images
+        wget -O stock.tar.xz "${{ inputs.STOCK_IMAGES_URL }}"
+        tar -xf stock.tar.xz
+        ls -la
+        
+        # Use dumpyara to extract the images into proper dump format
+        # dumpyara can process boot.img, recovery.img, etc.
+        if [ -f boot.img ]; then
+          echo "Processing boot.img with dumpyara..."
+          python3 -m dumpyara boot.img
+        elif [ -f init_boot.img ]; then
+          echo "Processing init_boot.img with dumpyara..."
+          python3 -m dumpyara init_boot.img
+        elif [ -f recovery.img ]; then
+          echo "Processing recovery.img with dumpyara..."
+          python3 -m dumpyara recovery.img
+        else
+          echo "No suitable boot image found"
+          exit 1
+        fi
+        
+        # Find the dump directory created by dumpyara
+        DUMP_DIR=$(find . -maxdepth 1 -type d -name "*dump*" | head -n 1)
+        if [ -z "$DUMP_DIR" ]; then
+          echo "Dumpyara failed to create dump directory"
+          exit 1
+        fi
+        
+        echo "DUMP_DIR=${GITHUB_WORKSPACE}/stock_images/${DUMP_DIR}" >> $GITHUB_ENV
+        echo "Dump created at: ${DUMP_DIR}"
       
     - name: Set-up Manifest
       if: inputs.MANIFEST_BRANCH == '11.0' || inputs.MANIFEST_BRANCH == '12.1'
@@ -81,12 +111,88 @@ jobs:
         cd sync
         ./orangefox_sync.sh --branch ${{ inputs.MANIFEST_BRANCH }} --path ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
 
-    - name: Clone Device Tree
+    - name: Generate Device Tree
+      run: |
+        cd ${GITHUB_WORKSPACE}/stock_images
+        
+        # Generate device tree using aospdtgen
+        python3 -m aospdtgen ${DUMP_DIR}
+        
+        # Find the generated device tree directory
+        # aospdtgen creates device/<manufacturer>/<codename>
+        GENERATED_BASE=$(find . -type d -path "*/device/*/*" | head -n 1)
+        if [ -z "$GENERATED_BASE" ]; then
+          echo "Device tree generation failed"
+          exit 1
+        fi
+        
+        echo "Generated device tree at: ${GENERATED_BASE}"
+        
+        # Extract device information from the path
+        # Path format is ./device/<manufacturer>/<codename>
+        DEVICE_NAME=$(basename ${GENERATED_BASE})
+        MANUFACTURER=$(basename $(dirname ${GENERATED_BASE}))
+        DEVICE_PATH="device/${MANUFACTURER}/${DEVICE_NAME}"
+        
+        echo "DEVICE_NAME=${DEVICE_NAME}" >> $GITHUB_ENV
+        echo "DEVICE_PATH=${DEVICE_PATH}" >> $GITHUB_ENV
+        echo "MANUFACTURER=${MANUFACTURER}" >> $GITHUB_ENV
+        echo "GENERATED_TREE_DIR=${GITHUB_WORKSPACE}/stock_images/${GENERATED_BASE}" >> $GITHUB_ENV
+        
+        echo "Device Name: ${DEVICE_NAME}"
+        echo "Manufacturer: ${MANUFACTURER}"
+        echo "Device Path: ${DEVICE_PATH}"
+        
+        # Navigate to the generated device tree
+        cd ${GITHUB_WORKSPACE}/stock_images/${GENERATED_BASE}
+        
+        # Ensure AndroidProducts.mk has twrp product
+        if [ -f "AndroidProducts.mk" ]; then
+          # Check if twrp product exists
+          if ! grep -q "twrp_${DEVICE_NAME}" AndroidProducts.mk; then
+            # Add twrp product if it doesn't exist
+            if grep -q "lineage_${DEVICE_NAME}" AndroidProducts.mk; then
+              # Copy lineage config to twrp
+              if [ -f "lineage_${DEVICE_NAME}.mk" ]; then
+                cp "lineage_${DEVICE_NAME}.mk" "twrp_${DEVICE_NAME}.mk"
+                sed -i "s/lineage_/twrp_/g" "twrp_${DEVICE_NAME}.mk"
+                sed -i "s/lineage/twrp/g" "twrp_${DEVICE_NAME}.mk"
+                echo "PRODUCT_MAKEFILES += \$(LOCAL_DIR)/twrp_${DEVICE_NAME}.mk" >> AndroidProducts.mk
+              fi
+            fi
+          fi
+        fi
+        
+        # Create or update twrp product file if needed
+        if [ ! -f "twrp_${DEVICE_NAME}.mk" ]; then
+          echo "Creating twrp_${DEVICE_NAME}.mk"
+          cat > "twrp_${DEVICE_NAME}.mk" << EOF
+# Inherit from device
+\$(call inherit-product, device/${MANUFACTURER}/${DEVICE_NAME}/device.mk)
+
+# Inherit some common TWRP stuff
+\$(call inherit-product, vendor/twrp/config/common.mk)
+
+# Device identifier
+PRODUCT_DEVICE := ${DEVICE_NAME}
+PRODUCT_NAME := twrp_${DEVICE_NAME}
+PRODUCT_BRAND := ${MANUFACTURER}
+PRODUCT_MODEL := ${DEVICE_NAME}
+PRODUCT_MANUFACTURER := ${MANUFACTURER}
+EOF
+        fi
+        
+        ls -la
+        echo "Device tree configured for OrangeFox/TWRP build"
+    
+    - name: Copy Device Tree to Build Directory
       run: |
         cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
-        git clone ${{ inputs.DEVICE_TREE }} -b ${{ inputs.DEVICE_TREE_BRANCH }} ./${{ inputs.DEVICE_PATH }}
-        cd ${{ inputs.DEVICE_PATH }}
-        echo "COMMIT_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
+        mkdir -p $(dirname ${DEVICE_PATH})
+        cp -r ${GENERATED_TREE_DIR} ${DEVICE_PATH}
+        cd ${DEVICE_PATH}
+        ls -la
+        echo "Device tree copied to ${DEVICE_PATH}"
 
     - name: Building OrangeFox
       run: |
@@ -95,30 +201,29 @@ jobs:
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
         set -e
-        lunch twrp_${{ inputs.DEVICE_NAME }}-eng && make clean && mka adbd ${{ inputs.BUILD_TARGET }}image
+        lunch twrp_${DEVICE_NAME}-eng && make clean && mka adbd ${{ inputs.BUILD_TARGET }}image
 
     - name: Set Release Properties
       run: |
         echo "BUILD_DATE=$(TZ=Asia/Manila date +%Y%m%d)" >> $GITHUB_ENV
         cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
-
-        DEVICE_TREE_URL="${{ inputs.DEVICE_TREE }}"
-        if [[ "${DEVICE_TREE_URL}" == *.git ]]; then
-          DEVICE_TREE_URL="${DEVICE_TREE_URL%.git}"
-        fi
-        echo "DEVICE_TREE_URL=${DEVICE_TREE_URL}" >> $GITHUB_ENV
+        
+        # Set stock images URL for release notes
+        echo "STOCK_IMAGES_URL=${{ inputs.STOCK_IMAGES_URL }}" >> $GITHUB_ENV
 
     - name: Upload to Release
       uses: softprops/action-gh-release@v2
       with:
         files: |
-          OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ inputs.DEVICE_NAME }}/OrangeFox*.img
-          OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ inputs.DEVICE_NAME }}/OrangeFox*.zip
-        name: OrangeFox Recovery for ${{ inputs.DEVICE_NAME }} // ${{ env.BUILD_DATE }}
+          OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ env.DEVICE_NAME }}/OrangeFox*.img
+          OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ env.DEVICE_NAME }}/OrangeFox*.zip
+        name: OrangeFox Recovery for ${{ env.DEVICE_NAME }} // ${{ env.BUILD_DATE }}
         tag_name: ${{ github.run_id }}
         body: |
           ## OrangeFox Recovery Build - Unofficial
           Build: fox_${{ inputs.MANIFEST_BRANCH }}
-          Device: [Device Tree/Branch](${{ env.DEVICE_TREE_URL }}/tree/${{ inputs.DEVICE_TREE_BRANCH }})
-          Commit: Most recent [commit](${{ env.DEVICE_TREE_URL }}/commit/${{ env.COMMIT_ID }}) during building.
+          Device: ${{ env.DEVICE_NAME }} (${{ env.MANUFACTURER }})
+          Stock Images: ${{ env.STOCK_IMAGES_URL }}
+          
+          **Note:** This build was automatically generated using aospdtgen from stock images.
           
