@@ -157,7 +157,7 @@ jobs:
                 cp "lineage_${DEVICE_NAME}.mk" "twrp_${DEVICE_NAME}.mk"
                 sed -i "s/lineage_/twrp_/g" "twrp_${DEVICE_NAME}.mk"
                 sed -i "s/lineage/twrp/g" "twrp_${DEVICE_NAME}.mk"
-                echo "PRODUCT_MAKEFILES += \$(LOCAL_DIR)/twrp_${DEVICE_NAME}.mk" >> AndroidProducts.mk
+                echo "PRODUCT_MAKEFILES += \$""(LOCAL_DIR)/twrp_${DEVICE_NAME}.mk" >> AndroidProducts.mk
               fi
             fi
           fi
@@ -166,20 +166,20 @@ jobs:
         # Create or update twrp product file if needed
         if [ ! -f "twrp_${DEVICE_NAME}.mk" ]; then
           echo "Creating twrp_${DEVICE_NAME}.mk"
-          cat > "twrp_${DEVICE_NAME}.mk" << EOF
-# Inherit from device
-\$(call inherit-product, device/${MANUFACTURER}/${DEVICE_NAME}/device.mk)
-
-# Inherit some common TWRP stuff
-\$(call inherit-product, vendor/twrp/config/common.mk)
-
-# Device identifier
-PRODUCT_DEVICE := ${DEVICE_NAME}
-PRODUCT_NAME := twrp_${DEVICE_NAME}
-PRODUCT_BRAND := ${MANUFACTURER}
-PRODUCT_MODEL := ${DEVICE_NAME}
-PRODUCT_MANUFACTURER := ${MANUFACTURER}
-EOF
+          {
+            echo "# Inherit from device"
+            echo "\$(call inherit-product, device/${MANUFACTURER}/${DEVICE_NAME}/device.mk)"
+            echo ""
+            echo "# Inherit some common TWRP stuff"
+            echo "\$(call inherit-product, vendor/twrp/config/common.mk)"
+            echo ""
+            echo "# Device identifier"
+            echo "PRODUCT_DEVICE := ${DEVICE_NAME}"
+            echo "PRODUCT_NAME := twrp_${DEVICE_NAME}"
+            echo "PRODUCT_BRAND := ${MANUFACTURER}"
+            echo "PRODUCT_MODEL := ${DEVICE_NAME}"
+            echo "PRODUCT_MANUFACTURER := ${MANUFACTURER}"
+          } > "twrp_${DEVICE_NAME}.mk"
         fi
         
         ls -la
