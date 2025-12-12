@@ -30,6 +30,11 @@ on:
         - boot
         - recovery
         - vendorboot
+      SKIP_CLEANUP:
+        description: 'Skip cleanup step (saves time for testing, but may run out of disk space)'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   build:
@@ -44,6 +49,7 @@ jobs:
       uses: actions/checkout@v4
               
     - name: Clean-up
+      if: inputs.SKIP_CLEANUP == false
       uses: rokibhasansagar/slimhub_actions@main
 
     - name: Swap Space

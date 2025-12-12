@@ -13,6 +13,7 @@ Compile your first custom recovery from OrangeFox Recovery using Github Action w
  * **MANIFEST_BRANCH** (`12.1` and `11.0`) - OrangeFox manifest version
  * **STOCK_IMAGES_URL** - Direct URL to your `.tar.xz` file containing stock boot images
  * **BUILD_TARGET** (`boot`, `recovery`, `vendorboot`) - Which image to build
+ * **SKIP_CLEANUP** (optional) - Skip cleanup step to save time when testing (may cause disk space issues for large builds)
 
 The workflow will automatically:
 - Download and extract your stock images
