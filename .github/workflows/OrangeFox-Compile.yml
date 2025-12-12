@@ -67,7 +67,7 @@ jobs:
     - name: Install Device Tree Generator
       run: |
         sudo apt update
-        sudo apt install -y python3 python3-pip unace unrar zip unzip p7zip-full p7zip-rar sharutils rar uudeview mpack arj cabextract file-roller device-tree-compiler liblzma-dev python3-pip brotli liblz4-tool axel gawk aria2 detox cpio rename liblz4-tool erofs-utils
+        sudo apt install -y python3 python3-pip unace unrar zip unzip p7zip-full p7zip-rar sharutils rar uudeview mpack arj cabextract file-roller device-tree-compiler liblzma-dev python3-pip brotli liblz4-tool axel gawk aria2 detox cpio rename liblz4-tool erofs-utils android-sdk-libsparse-utils android-libext4-utils
         pip3 install backports.lzma protobuf pycrypto docopt zstandard brotli extract-dtb pycryptodome
         pip3 install dumpyara aospdtgen
         echo "$HOME/.local/bin" >> $GITHUB_PATH
